@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch a directory of images with AlprStream 
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=alpr_image_scanner
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

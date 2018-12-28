@@ -1,0 +1,159 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+import logging
+import os
+import requests
+import re
+import subprocess
+import time
+import cv2
+from PIL import Image, ExifTags
+from openalpr import Alpr
+from alprstream import AlprStream
+from vehicleclassifier import VehicleClassifier
+
+parser = ArgumentParser()
+parser.add_argument('-d', '--directory', type=str, default='/var/lib/openalpr/watch',
+                    help='File path to folder with images to be processed')
+parser.add_argument('-w', '--webserver', type=str, default='https://cloud.openalpr.com',
+                    help='URL for webserver to post JSON results to')
+parser.add_argument('-k', '--keep', action='store_false', help='Prevents original images from being deleted')
+parser.add_argument('-f', '--foreground', action='store_true', help='Print logs to stdout instead of file')
+args = parser.parse_args()
+
+def watch(img_dir, webserver, rollingdb_cmd_path='/usr/bin/rdb_saveimage', min_confid=0.75, company_id=None,
+          camera_name='alprstream', country='us', rollingdb_dir='/var/lib/openalpr/plateimages',
+          log_file='/var/log/alpr_image_scanner.log', conf_file='/etc/openalpr/openalpr.conf',
+          runtime_dir='/usr/share/openalpr/runtime_data', delete=True, foreground=False):
+    """
+    Process plate images as they appear in a folder and send results to rollingdb + HTTP endpoint.
+
+    Uses an AlprStream instance as a "pseudo-agent" and is intended to be run as a daemon. This function must be run
+    with sudo privileges to write to the default log folder. To change the camera's display name in the webserver, go
+    to the configuration page for the agent UID (from /etc/openalpr/install_id) at
+    https://<webserver>/configure/agent/<agent_uid>. You should see a stream URL that matches the filepath given
+    by `img_dir`. Then, click the name field to edit.
+
+    :param str img_dir: File path to folder with images to be processed.
+    :param str webserver: URL for webserver to post JSON results to.
+    :param str rollingdb_cmd_path: Location of rdb_saveimage binary.
+    :param float min_confid: Minimum confidence threshold for plate detection.
+    :param str company_id: Valid ID required to POST to webserver. Defaults to the value in alprd.conf if not given.
+    :param str camera_name: Creates a dummy .conf file in /etc/openalpr/stream.d folder.
+    :param str country: To configure plate style.
+    :param str rollingdb_dir: Location of the LMDB on the local filesystem.
+    :param str log_file: File to output logs from this function (defaults to watch.log in current directory).
+    :param str conf_file: Path to openalpr.conf file used to initialize Alpr and VehicleClassifier instances.
+    :param str runtime_dir: Path to runtime_data folder used to initialize Alpr and VehicleClassifier instances.
+    :param bool delete: Delete original images after processing and upload (will still be accessible through rollingdb).
+    :param bool foreground: Print logs to stdout instead of file (default False).
+    :return: None
+    """
+
+    def get_timestamp(img):
+        """Use EXIF data if available, default to file system data.
+
+        :param str img: Filepath to JPEG image.
+        :return tuple: Linux epoch time in ms (int) and flag (bool, True if file system data was used instead of EXIF).
+        """
+        img_pillow = Image.open(img)
+        if img_pillow._getexif() is not None:
+            exif = {ExifTags.TAGS[k]: v for k, v in img_pillow._getexif().items() if k in ExifTags.TAGS}
+            datetime = exif['DateTime']
+            pattern = '%Y:%m:%d %H:%M:%S'
+            epoch = int(time.mktime(time.strptime(datetime, pattern)) * 1000)
+            return (epoch, False)
+        else:
+            epoch = int(os.path.getmtime(img) * 1000)
+            return (epoch, True)
+
+    if not foreground:
+        logging.basicConfig(
+            filename=log_file,
+            format='%(asctime)s %(levelname)8s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            level=logging.INFO)
+    else:
+        logging.basicConfig(
+            format='%(asctime)s %(levelname)8s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            level=logging.INFO)
+    imgs = [os.path.join(img_dir, f) for f in os.listdir(img_dir)]
+
+    if len(imgs) != 0:
+        # Configure agent, company, and camera IDs
+        try:
+            f = open('/etc/openalpr/install_id', 'r')
+            agent_uid = f.read()
+        except FileNotFoundError:
+            raise FileNotFoundError('No install ID from OpenALPR Agent')
+        if company_id is None:
+            try:
+                f = open('/etc/openalpr/alprd.conf', 'r')
+                lines = f.read().split('\n')
+                keep = [l for l in lines if 'company_id' in l]
+                company_id = re.findall('[^\s]+$', keep[0])[0]
+            except FileNotFoundError:
+                raise FileNotFoundError('/etc/openalpr/alprd.conf does not have a company ID')
+        f = open('/etc/openalpr/stream.d/{}.conf'.format(camera_name), 'w')
+        f.write('; Dummy camera.conf created by image_scanner.py\n')
+        f.write('camera_id = 1\n')
+        f.write('stream = {}\n'.format(img_dir))
+        f.close()
+
+        # Initialize AlprStream and associated C objects
+        alpr_stream = AlprStream(10)
+        alpr_stream.set_group_parameters(min_plates_to_group=1, min_confidence=min_confid, max_delta_time=0)
+        alpr_stream.set_env_parameters(company_id, agent_uid, 1)
+        alpr = Alpr(country, conf_file, runtime_dir)
+        vehicle_classifier = VehicleClassifier(conf_file, runtime_dir)
+
+        for img in imgs:
+            # Push images to queue and process with AlprStream
+            logging.info('Processing {}'.format(img))
+            img_cv2 = cv2.imread(img)
+            height, width, bpp = img_cv2.shape
+            epoch, no_exif = get_timestamp(img)
+            if no_exif:
+                logging.warning('No EXIF data found, defaulting to file system metadata')
+            queue_before = alpr_stream.push_frame(img_cv2, bpp, width, height, epoch)
+            alpr_stream.process_frame(alpr)
+            queue_after = alpr_stream.get_queue_size()
+            logging.info('Queue before/after ({}/{})'.format(queue_before, queue_after))
+            group_results = alpr_stream.pop_completed_groups_and_recognize_vehicle(vehicle_classifier)
+            if len(group_results) > 0:
+                logging.info('Plate detected {}'.format(group_results['best_plate']['plate']))
+
+                # Insert plates into rollingdb
+                args = [rollingdb_cmd_path, '-k', group_results['best_uuid'], '-r', rollingdb_dir, img]
+                subprocess.Popen(args, stdout=subprocess.PIPE).communicate()[0].decode('utf-8')
+                logging.info('Sent image to rollingDB with key: {}'.format(group_results['best_uuid']))
+
+                # Upload to webserver
+                while True:
+                    r = requests.post(os.path.join(webserver, 'push'), json=group_results, verify=False)
+                    logging.info('Webserver POST status {}: {}'.format(r.status_code, r.text))
+                    if str(r.status_code)[0] == '2':
+                        break
+                    else:
+                        logging.error('Upload to webserver failed. Retrying indefinitely')
+            else:
+                logging.warning('No plates detected')
+
+            # Delete images once processed
+            if delete:
+                try:
+                    os.remove(img)
+                except FileNotFoundError as e:
+                    print(e)
+    else:
+        logging.warning('Folder {} is currently empty'.format(img_dir))
+
+if __name__ == '__main__':
+
+    watch(
+        img_dir=args.directory,
+        webserver=args.webserver,
+        delete=args.keep,
+        foreground=args.foreground)
