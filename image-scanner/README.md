@@ -12,7 +12,7 @@ Watches a folder for images, detects plates using AlprStream Python binding, ins
 
 # Installation
 
-1. (Optional) Edit `alpr_image_scanner.service` at the `ExecStart` line if you would like to change the default folder to watch and webserver for upload. These are the `-d` and `-w` flags with defaults `/home/camera/FARMROAD` and `https://localhost`, respectively.
+1. (Optional) Edit `alpr_image_scanner.service` at the `ExecStart` line if you would like to change the default folder to watch and webserver for upload. These are the `-d` and `-w` flags with defaults `/var/lib/openalpr/watch` and `https://cloud.openalpr.com`, respectively.
 2. Open terminal, navigate to the folder with this README, and run `bash install.sh`
 3. You can check the log file in `/var/log/alpr_image_scanner.log` for details on the status of the daemon.
 
