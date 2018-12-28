@@ -1,6 +1,6 @@
 # Image Scanner
 
-Completed on 12/28/2018
+Completed on 12/28/2018  
 Watches a folder for images, detects plates using AlprStream Python binding, inserts images into rollingDB, and uploads JSON to webserver.
 
 # Prerequisites 
