@@ -19,7 +19,7 @@ def get_cpu_model(operating):
         model = [c for c in cpu_info if model_regex.match(c)]
         model = model[0].split(':')[-1].strip()
     elif operating == 'windows':
-        model = ''
+        model = platform.processor()
     else:
         raise ValueError('Expected OS to be linux or windows, but received {}'.format(operating))
     return model
@@ -65,6 +65,7 @@ class AlprBench:
         elif platform.system().lower().find('windows') == 0:
             operating = 'windows'
             self.message('\tOperating system: Windows')
+            self.message('\tCPU model: {}'.format(get_cpu_model('windows')))
         else:
             raise OSError('Detected OS other than Linux or Windows')
 
