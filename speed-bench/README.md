@@ -10,8 +10,7 @@ Drive OpenALPR on all CPU cores to benchmark speed for various video resolutions
 
 ## Installation
 
-1. Download the OpenALPR [SDK](http://doc.openalpr.com/sdk.html#installation) or 
-[Agent](http://doc.openalpr.com/on_premises.html#installation) software
+1. Download the OpenALPR [SDK](http://doc.openalpr.com/sdk.html#installation) 
 2. Clone this repository
 
 ## Usage
@@ -28,7 +27,7 @@ Initializing...
 	OpenALPR configuration: /usr/share/openalpr/config/openalpr.defaults.conf
 Downloading benchmark videos...
 	Found local vga
-	Found local 720p
+	Downloaded 720p
 	Found local 1080p
 	Found local 4k
 Benchmarking on 12 threads...
