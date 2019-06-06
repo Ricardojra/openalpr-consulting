@@ -3,12 +3,26 @@ from multiprocessing import cpu_count
 import os
 import platform
 import re
+import subprocess
 from threading import Thread, Lock
 from time import time, sleep
 import urllib
 from alprstream import AlprStream
 from openalpr import Alpr
 from vehicleclassifier import VehicleClassifier
+
+
+def get_cpu_model(operating):
+    if operating == 'linux':
+        cpu_info = subprocess.check_output('lscpu').strip().decode().split('\n')
+        model_regex = re.compile('^Model name')
+        model = [c for c in cpu_info if model_regex.match(c)]
+        model = model[0].split(':')[-1].strip()
+    elif operating == 'windows':
+        model = ''
+    else:
+        raise ValueError('Expected OS to be linux or windows, but received {}'.format(operating))
+    return model
 
 
 class AlprBench:
@@ -47,6 +61,7 @@ class AlprBench:
         if platform.system().lower().find('linux') == 0:
             operating = 'linux'
             self.message('\tOperating system: Linux')
+            self.message('\tCPU model: {}'.format(get_cpu_model('linux')))
         elif platform.system().lower().find('windows') == 0:
             operating = 'windows'
             self.message('\tOperating system: Windows')
