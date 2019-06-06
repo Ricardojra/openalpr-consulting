@@ -8,6 +8,7 @@ from time import time, sleep
 import urllib
 from alprstream import AlprStream
 from openalpr import Alpr
+from vehicleclassifier import VehicleClassifier
 
 
 class AlprBench:
@@ -131,13 +132,14 @@ class AlprBench:
         :return: None
         """
         alpr = Alpr('us', self.config, self.runtime)
+        vehicle = VehicleClassifier(self.config, self.runtime)
         while alprstream.video_file_active() or alprstream.get_queue_size() > 0:
             if not self.threads_active:
                 break
             if alprstream.get_queue_size() == 0:
                 sleep(0.1)
                 continue
-            _ = alprstream.pop_completed_groups()
+            _ = alprstream.pop_completed_groups_and_recognize_vehicle(vehicle)
             _ = alprstream.process_frame(alpr)
             self.mutex.acquire()
             self.frame_counter += 1
