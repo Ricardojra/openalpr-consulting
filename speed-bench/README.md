@@ -23,6 +23,7 @@ View all command line options by running `python alprbench.py -h`
 ```commandline
 Initializing...
 	Operating system: Linux
+	CPU model: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz	
 	Runtime data: /usr/share/openalpr/runtime_data
 	OpenALPR configuration: /usr/share/openalpr/config/openalpr.defaults.conf
 Downloading benchmark videos...
