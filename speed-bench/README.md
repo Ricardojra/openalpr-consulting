@@ -11,18 +11,24 @@ Drive OpenALPR on all CPU cores to benchmark speed for various video resolutions
 ## Installation
 
 1. Download the OpenALPR [SDK](http://doc.openalpr.com/sdk.html#installation) 
-2. Clone this repository
+2. Clone this repository `git clone https://github.com/addisonklinke/openalpr-consulting.git`
+3. Install the Python requirements `pip install -r requirements.txt`
 
 ## Usage
 
-View all command line options by running `python alprbench.py -h`
+1. View all command line options by running `python alprbench.py -h`
+2. Select your desired resolution(s) and run a benchmark with 1 stream. Options are `vga, 720p, 1080p, and 4k`
+3. Check the average CPU utilization in the output. Resolutions with a utilization less than 95% are bottlenecked on
+decoding the video stream (typical for higher resolutions). These should be rerun with additional streams for a 
+better estimate of maximum performance using the `--streams` flag
 
 ## Sample Output
 
 ```commandline
+user@ubuntu:~/openalpr-consulting/speed-bench$ python alprbench.py --streams 4
 Initializing...
 	Operating system: Linux
-	CPU model: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz	
+	CPU model: Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
 	Runtime data: /usr/share/openalpr/runtime_data
 	OpenALPR configuration: /usr/share/openalpr/config/openalpr.defaults.conf
 Downloading benchmark videos...
@@ -30,9 +36,15 @@ Downloading benchmark videos...
 	Downloaded 720p
 	Found local 1080p
 	Found local 4k
-Benchmarking on 12 threads...
-	vga = 79.8 fps (10978 frames)
-	720p = 59.8 fps (1126 frames)
-	1080p = 39.5 fps (601 frames)
-	4k = 32.0 fps (892 frames)
++---------------------------------------------------------+
+|      OpenALPR Benchmark: 4 stream(s) on 12 threads      |
++------------+-----------+-----------+-----------+--------+
+| Resolution | Total FPS | CPU (Avg) | CPU (Max) | Frames |
++------------+-----------+-----------+-----------+--------+
+|    vga     |    89.7   |    98.6   |   100.0   | 10978  |
+|    720p    |    68.7   |    98.2   |   100.0   |  1125  |
+|   1080p    |    43.2   |    97.5   |   100.0   |  600   |
+|     4k     |    36.2   |    99.5   |   100.0   |  870   |
++------------+-----------+-----------+-----------+--------+
+
 ```
