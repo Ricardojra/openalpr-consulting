@@ -9,6 +9,7 @@ import subprocess
 from threading import Thread, Lock
 from time import time, sleep
 import urllib
+from prettytable import PrettyTable
 import psutil
 from alprstream import AlprStream
 from openalpr import Alpr
@@ -56,12 +57,18 @@ class AlprBench:
         self.downloads = downloads
         if not os.path.exists(self.downloads):
             os.mkdir(self.downloads)
+
+        # Prepare other attributes
         self.cpu_usage = {r: [] for r in self.resolution}
         self.threads_active = False
         self.frame_counter = 0
         self.mutex = Lock()
         self.streams = []
         self.round_robin = cycle(range(self.num_streams))
+        self.results = PrettyTable()
+        self.results.field_names = ['Resolution', 'Total FPS', 'CPU (Avg)', 'CPU (Max)', 'Frames']
+        self.results.title = 'OpenALPR Benchmark: {} stream(s) on {} threads'.format(
+            self.num_streams, cpu_count())
 
         # Detect operating system
         if platform.system().lower().find('linux') == 0:
@@ -93,16 +100,15 @@ class AlprBench:
         self.streams = [AlprStream(10, False) for _ in range(self.num_streams)]
         name_regex = re.compile('(?<=\/)[^\.\/]+')
         self.threads_active = True
-        print('Benchmarking {} stream(s) on {} threads...'.format(self.num_streams, cpu_count()))
 
         for v in videos:
-            short = name_regex.findall(v)[-1]
+            res = name_regex.findall(v)[-1]
             self.frame_counter = 0
             threads = []
             for s in self.streams:
                 s.connect_video_file(v, 0)
             for i in range(cpu_count()):
-                threads.append(Thread(target=self.worker, args=(short, )))
+                threads.append(Thread(target=self.worker, args=(res, )))
                 threads[i].setDaemon(True)
             start = time()
             for t in threads:
@@ -115,10 +121,8 @@ class AlprBench:
                     self.threads_active = False
                     break
             elapsed = time() - start
-            avg_frames = int(self.frame_counter/self.num_streams)
-            avg_cpu = mean(self.cpu_usage[short])
-            print('\t{} = {:.1f} fps ({} frames each, {:.1f}% CPU utilization)'.format(
-                short, self.frame_counter/elapsed, avg_frames, avg_cpu))
+            self.format_results(res, elapsed)
+        print(self.results)
 
     def download_benchmarks(self):
         """Save requested benchmark videos locally.
@@ -131,16 +135,29 @@ class AlprBench:
         existing = os.listdir(self.downloads)
         self.message('Downloading benchmark videos...')
         for f in files:
-            short = f.split('.')[0]
-            if short in self.resolution:
+            res = f.split('.')[0]
+            if res in self.resolution:
                 out = os.path.join(self.downloads, f)
                 videos.append(out)
                 if f not in existing:
                     _ = urllib.urlretrieve(os.path.join(endpoint, f), out)
-                    self.message('\tDownloaded {}'.format(short))
+                    self.message('\tDownloaded {}'.format(res))
                 else:
-                    self.message('\tFound local {}'.format(short))
+                    self.message('\tFound local {}'.format(res))
         return videos
+
+    def format_results(self, resolution, elapsed):
+        """Update results table.
+
+        :param str resolution: Resolution of the video that was benchmarked.
+        :param float elapsed: Time to process video (in seconds).
+        :return: None
+        """
+        total_fps = '{:.1f}'.format(self.frame_counter / elapsed)
+        avg_cpu = '{:.1f}'.format(mean(self.cpu_usage[resolution]))
+        max_cpu = '{:.1f}'.format(max(self.cpu_usage[resolution]))
+        avg_frames = int(self.frame_counter / self.num_streams)
+        self.results.add_row([resolution, total_fps, avg_cpu, max_cpu, avg_frames])
 
     def message(self, msg):
         """Control verbosity of output.
