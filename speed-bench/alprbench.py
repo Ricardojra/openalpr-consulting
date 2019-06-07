@@ -4,10 +4,12 @@ from multiprocessing import cpu_count
 import os
 import platform
 import re
+from statistics import mean
 import subprocess
 from threading import Thread, Lock
 from time import time, sleep
 import urllib
+import psutil
 from alprstream import AlprStream
 from openalpr import Alpr
 from vehicleclassifier import VehicleClassifier
@@ -54,6 +56,7 @@ class AlprBench:
         self.downloads = downloads
         if not os.path.exists(self.downloads):
             os.mkdir(self.downloads)
+        self.cpu_usage = {r: [] for r in self.resolution}
         self.threads_active = False
         self.frame_counter = 0
         self.mutex = Lock()
@@ -93,12 +96,13 @@ class AlprBench:
         print('Benchmarking {} stream(s) on {} threads...'.format(self.num_streams, cpu_count()))
 
         for v in videos:
+            short = name_regex.findall(v)[-1]
             self.frame_counter = 0
             threads = []
             for s in self.streams:
                 s.connect_video_file(v, 0)
             for i in range(cpu_count()):
-                threads.append(Thread(target=self.worker))
+                threads.append(Thread(target=self.worker, args=(short, )))
                 threads[i].setDaemon(True)
             start = time()
             for t in threads:
@@ -111,8 +115,10 @@ class AlprBench:
                     self.threads_active = False
                     break
             elapsed = time() - start
-            print('\t{} = {:.1f} fps ({} frames each)'.format(
-                name_regex.findall(v)[-1], self.frame_counter/elapsed, int(self.frame_counter/self.num_streams)))
+            avg_frames = int(self.frame_counter/self.num_streams)
+            avg_cpu = mean(self.cpu_usage[short])
+            print('\t{} = {:.1f} fps ({} frames each, {:.1f}% CPU utilization)'.format(
+                short, self.frame_counter/elapsed, avg_frames, avg_cpu))
 
     def download_benchmarks(self):
         """Save requested benchmark videos locally.
@@ -145,7 +151,7 @@ class AlprBench:
         if not self.quiet:
             print(msg)
 
-    def worker(self):
+    def worker(self, resolution):
         """Thread for a single Alpr and VehicleClassifier instance."""
         alpr = Alpr('us', self.config, self.runtime)
         vehicle = VehicleClassifier(self.config, self.runtime)
@@ -164,6 +170,8 @@ class AlprBench:
             _ = self.streams[idx].process_frame(alpr)
             self.mutex.acquire()
             self.frame_counter += 1
+            if self.frame_counter % 10 == 0:
+                self.cpu_usage[resolution].append(psutil.cpu_percent())
             self.mutex.release()
 
 
