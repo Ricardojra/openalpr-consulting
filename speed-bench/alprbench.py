@@ -104,6 +104,7 @@ class AlprBench:
 
         for v in videos:
             res = name_regex.findall(v)[-1]
+            self.message('Processing {}...'.format(res))
             self.frame_counter = 0
             threads = []
             for s in self.streams:
@@ -180,17 +181,18 @@ class AlprBench:
                 break
             active_streams = sum([s.video_file_active() for s in self.streams])
             total_queue = sum([s.get_queue_size() for s in self.streams])
-            if total_queue == 0:
+            idx = next(self.round_robin)
+            if self.streams[idx].get_queue_size() == 0:
                 sleep(0.1)
                 continue
-            idx = next(self.round_robin)
-            _ = self.streams[idx].pop_completed_groups_and_recognize_vehicle(vehicle)
-            _ = self.streams[idx].process_frame(alpr)
-            self.mutex.acquire()
-            self.frame_counter += 1
-            if self.frame_counter % 10 == 0:
-                self.cpu_usage[resolution].append(psutil.cpu_percent())
-            self.mutex.release()
+            results = self.streams[idx].process_frame(alpr)
+            if results['epoch_time'] > 0 and results['processing_time_ms'] > 0:
+                _ = self.streams[idx].pop_completed_groups_and_recognize_vehicle(vehicle)
+                self.mutex.acquire()
+                self.frame_counter += 1
+                if self.frame_counter % 10 == 0:
+                    self.cpu_usage[resolution].append(psutil.cpu_percent())
+                self.mutex.release()
 
 
 if __name__ == '__main__':

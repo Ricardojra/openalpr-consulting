@@ -4,7 +4,8 @@ Drive OpenALPR on all CPU cores to benchmark speed for various video resolutions
 
 ## Prequisites
 
-* OpenALPR commercial or evaluation license
+* OpenALPR commercial license (2-week evaluation licenses can be obtained from 
+[here](https://license.openalpr.com/evalrequest/))
 * Ubuntu 18.04, Ubuntu 16.04, or Windows 10
 * Python3
 
@@ -36,6 +37,10 @@ Downloading benchmark videos...
 	Downloaded 720p
 	Found local 1080p
 	Found local 4k
+Processing vga...
+Processing 720p...
+Processing 1080p...
+Processing 4k...
 +---------------------------------------------------------+
 |      OpenALPR Benchmark: 4 stream(s) on 12 threads      |
 +------------+-----------+-----------+-----------+--------+
