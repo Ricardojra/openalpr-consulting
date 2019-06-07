@@ -1,4 +1,5 @@
 import argparse
+from itertools import cycle
 from multiprocessing import cpu_count
 import os
 import platform
@@ -28,19 +29,19 @@ def get_cpu_model(operating):
 class AlprBench:
     """Benchmark OpenALPR software speed for various video resolutions.
 
-    :param int streams: Number of camera streams to simulate.
+    :param int num_streams: Number of camera streams to simulate.
     :param str or [str] resolution: Resolution(s) of videos to benchmark.
     :param str downloads: Folder to save benchmark videos to.
     :param str runtime: Path to runtime data folder.
     :param str config: Path to OpenALPR configuration file.
     :param bool quiet: Suppress all output besides final results.
     """
-    def __init__(self, streams, resolution, downloads='/tmp/alprbench', runtime=None, config=None, quiet=False):
+    def __init__(self, num_streams, resolution, downloads='/tmp/alprbench', runtime=None, config=None, quiet=False):
 
         # Transfer parameters to attributes
         self.quiet = quiet
         self.message('Initializing...')
-        self.streams = streams
+        self.num_streams = num_streams
         if isinstance(resolution, str):
             if resolution == 'all':
                 self.resolution = ['vga', '720p', '1080p', '4k']
@@ -56,6 +57,8 @@ class AlprBench:
         self.threads_active = False
         self.frame_counter = 0
         self.mutex = Lock()
+        self.streams = []
+        self.round_robin = cycle(range(self.num_streams))
 
         # Detect operating system
         if platform.system().lower().find('linux') == 0:
@@ -84,17 +87,18 @@ class AlprBench:
     def __call__(self):
         """Run threaded benchmarks on all requested resolutions."""
         videos = self.download_benchmarks()
-        alprstream = AlprStream(frame_queue_size=10)
+        self.streams = [AlprStream(10, False) for _ in range(self.num_streams)]
         name_regex = re.compile('(?<=\/)[^\.\/]+')
         self.threads_active = True
-        print('Benchmarking on {} threads...'.format(cpu_count()))
+        print('Benchmarking {} stream(s) on {} threads...'.format(self.num_streams, cpu_count()))
 
         for v in videos:
             self.frame_counter = 0
             threads = []
-            alprstream.connect_video_file(v, 0)
+            for s in self.streams:
+                s.connect_video_file(v, 0)
             for i in range(cpu_count()):
-                threads.append(Thread(target=self.worker, args=(alprstream, )))
+                threads.append(Thread(target=self.worker))
                 threads[i].setDaemon(True)
             start = time()
             for t in threads:
@@ -107,8 +111,8 @@ class AlprBench:
                     self.threads_active = False
                     break
             elapsed = time() - start
-            print('\t{} = {:.1f} fps ({} frames)'.format(
-                name_regex.findall(v)[-1], self.frame_counter/elapsed, self.frame_counter))
+            print('\t{} = {:.1f} fps ({} frames each)'.format(
+                name_regex.findall(v)[-1], self.frame_counter/elapsed, int(self.frame_counter/self.num_streams)))
 
     def download_benchmarks(self):
         """Save requested benchmark videos locally.
@@ -141,22 +145,23 @@ class AlprBench:
         if not self.quiet:
             print(msg)
 
-    def worker(self, alprstream):
-        """Worker thread for a single stream and Alpr combination.
-
-        :param alprstream: OpenALPR instance to manage the video stream.
-        :return: None
-        """
+    def worker(self):
+        """Thread for a single Alpr and VehicleClassifier instance."""
         alpr = Alpr('us', self.config, self.runtime)
         vehicle = VehicleClassifier(self.config, self.runtime)
-        while alprstream.video_file_active() or alprstream.get_queue_size() > 0:
+        active_streams = sum([s.video_file_active() for s in self.streams])
+        total_queue = sum([s.get_queue_size() for s in self.streams])
+        while active_streams or total_queue > 0:
             if not self.threads_active:
                 break
-            if alprstream.get_queue_size() == 0:
+            active_streams = sum([s.video_file_active() for s in self.streams])
+            total_queue = sum([s.get_queue_size() for s in self.streams])
+            if total_queue == 0:
                 sleep(0.1)
                 continue
-            _ = alprstream.pop_completed_groups_and_recognize_vehicle(vehicle)
-            _ = alprstream.process_frame(alpr)
+            idx = next(self.round_robin)
+            _ = self.streams[idx].pop_completed_groups_and_recognize_vehicle(vehicle)
+            _ = self.streams[idx].process_frame(alpr)
             self.mutex.acquire()
             self.frame_counter += 1
             self.mutex.release()
