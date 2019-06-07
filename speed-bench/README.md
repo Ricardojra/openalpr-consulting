@@ -48,6 +48,12 @@ Downloading benchmark videos...
 +------------+-----------+-----------+-----------+--------+
 ```
 
+To estimate the number of cameras for a given total FPS value, use the following per-camera rules of thumb
+
+* **Low Speed** (under 25 mph): 5-10 fps
+* **Medium Speed** (25-45 mph): 10-15 fps
+* **High Speed** (over 45 mph): 15-30 fps
+
 ## Running in Docker
 
 If preferred, you can install OpenALPR software in our pre-built Docker container
