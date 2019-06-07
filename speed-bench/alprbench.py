@@ -1,5 +1,6 @@
 import argparse
 from itertools import cycle
+from math import floor
 from multiprocessing import cpu_count
 import os
 import platform
@@ -67,7 +68,7 @@ class AlprBench:
         self.round_robin = cycle(range(self.num_streams))
         self.results = PrettyTable()
         self.results.field_names = ['Resolution', 'Total FPS', 'CPU (Avg)', 'CPU (Max)', 'Frames']
-        self.results.title = 'OpenALPR Benchmark: {} stream(s) on {} threads'.format(
+        self.results.title = 'OpenALPR Speed: {} stream(s) on {} threads'.format(
             self.num_streams, cpu_count())
 
         # Detect operating system
