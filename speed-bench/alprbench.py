@@ -8,12 +8,20 @@ from statistics import mean
 import subprocess
 from threading import Thread, Lock
 from time import time, sleep
-import urllib
 from prettytable import PrettyTable
 import psutil
 from alprstream import AlprStream
 from openalpr import Alpr
 from vehicleclassifier import VehicleClassifier
+
+
+PYTHON_VERSION = platform.python_version_tuple()[0]
+if PYTHON_VERSION == '3':
+    from urllib.request import urlretrieve
+elif PYTHON_VERSION == '2':
+    from urllib import urlretrieve
+else:
+    raise OSError('Expected Python version 2 or 3, but received {}'.format(PYTHON_VERSION))
 
 
 def get_cpu_model(operating):
@@ -141,7 +149,7 @@ class AlprBench:
                 out = os.path.join(self.downloads, f)
                 videos.append(out)
                 if f not in existing:
-                    _ = urllib.urlretrieve(os.path.join(endpoint, f), out)
+                    _ = urlretrieve(os.path.join(endpoint, f), out)
                     self.message('\tDownloaded {}'.format(res))
                 else:
                     self.message('\tFound local {}'.format(res))
