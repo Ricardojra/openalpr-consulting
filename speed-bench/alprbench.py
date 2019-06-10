@@ -1,6 +1,5 @@
 import argparse
 from itertools import cycle
-from math import floor
 from multiprocessing import cpu_count
 import os
 import platform
