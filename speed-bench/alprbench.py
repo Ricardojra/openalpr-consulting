@@ -42,12 +42,14 @@ class AlprBench:
 
     :param int num_streams: Number of camera streams to simulate.
     :param str or [str] resolution: Resolution(s) of videos to benchmark.
+    :param bool gpu: Whether or not to use GPU acceleration.
     :param str downloads: Folder to save benchmark videos to.
     :param str runtime: Path to runtime data folder.
     :param str config: Path to OpenALPR configuration file.
     :param bool quiet: Suppress all output besides final results.
     """
-    def __init__(self, num_streams, resolution, downloads='/tmp/alprbench', runtime=None, config=None, quiet=False):
+    def __init__(self, num_streams, resolution, gpu=False, downloads='/tmp/alprbench',
+                 runtime=None, config=None, quiet=False):
 
         # Transfer parameters to attributes
         self.quiet = quiet
@@ -62,6 +64,7 @@ class AlprBench:
             self.resolution = resolution
         else:
             raise ValueError('Expected list or str for resolution, but received {}'.format(resolution))
+        self.gpu = gpu
         self.downloads = downloads
         if not os.path.exists(self.downloads):
             os.mkdir(self.downloads)
@@ -101,6 +104,16 @@ class AlprBench:
                 self.config = 'C:/OpenALPR/Agent' + self.config
         self.message('\tRuntime data: {}'.format(self.runtime))
         self.message('\tOpenALPR configuration: {}'.format(self.config))
+
+        # Enable GPU acceleration
+        if self.gpu:
+            with open(self.config, 'r') as f:
+                lines = [l.strip() for l in f.read().split('\n') if l != '']
+            lines.append('hardware_acceleration = 1')
+            self.config = os.path.join(self.downloads, 'openalpr.conf')
+            with open(self.config, 'w') as f:
+                for l in lines:
+                    f.write('{}\n'.format(l))
 
     def __call__(self):
         """Run threaded benchmarks on all requested resolutions."""
@@ -208,6 +221,7 @@ if __name__ == '__main__':
         description='Benchmark OpenALPR software speed at various video resolutions',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-d', '--download_dir', type=str, default='/tmp/alprbench', help='folder to save videos')
+    parser.add_argument('-g', '--gpu', action='store_true', help='run on GPU if available')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress all output besides final results')
     parser.add_argument('-r', '--resolution', type=str, default='all', help='video resolution to benchmark on')
     parser.add_argument('-s', '--streams', type=int, default=1, help='number of camera streams to simulate')
@@ -220,6 +234,7 @@ if __name__ == '__main__':
     bench = AlprBench(
         args.streams,
         args.resolution,
+        args.gpu,
         args.download_dir,
         args.runtime,
         args.config,
