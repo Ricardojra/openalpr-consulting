@@ -43,13 +43,11 @@ class AlprBench:
     :param int num_streams: Number of camera streams to simulate.
     :param str or [str] resolution: Resolution(s) of videos to benchmark.
     :param bool gpu: Whether or not to use GPU acceleration.
-    :param str downloads: Folder to save benchmark videos to.
     :param str runtime: Path to runtime data folder.
     :param str config: Path to OpenALPR configuration file.
     :param bool quiet: Suppress all output besides final results.
     """
-    def __init__(self, num_streams, resolution, gpu=False, downloads='/tmp/alprbench',
-                 runtime=None, config=None, quiet=False):
+    def __init__(self, num_streams, resolution, gpu=False, runtime=None, config=None, quiet=False):
 
         # Transfer parameters to attributes
         self.quiet = quiet
@@ -65,21 +63,6 @@ class AlprBench:
         else:
             raise ValueError('Expected list or str for resolution, but received {}'.format(resolution))
         self.gpu = gpu
-        self.downloads = downloads
-        if not os.path.exists(self.downloads):
-            os.mkdir(self.downloads)
-
-        # Prepare other attributes
-        self.cpu_usage = {r: [] for r in self.resolution}
-        self.threads_active = False
-        self.frame_counter = 0
-        self.mutex = Lock()
-        self.streams = []
-        self.round_robin = cycle(range(self.num_streams))
-        self.results = PrettyTable()
-        self.results.field_names = ['Resolution', 'Total FPS', 'CPU (Avg)', 'CPU (Max)', 'Frames']
-        self.results.title = 'OpenALPR Speed: {} stream(s) on {} threads'.format(
-            self.num_streams, cpu_count())
 
         # Detect operating system
         if platform.system().lower().find('linux') == 0:
@@ -92,6 +75,24 @@ class AlprBench:
             self.message('\tCPU model: {}'.format(get_cpu_model('windows')))
         else:
             raise OSError('Detected OS other than Linux or Windows')
+
+        # Prepare other attributes
+        if operating == 'linux':
+            self.downloads = '/tmp/alprbench'
+        else:
+            self.downloads = os.path.join(os.environ['TEMP'], 'alprbench')
+        if not os.path.exists(self.downloads):
+            os.mkdir(self.downloads)
+        self.cpu_usage = {r: [] for r in self.resolution}
+        self.threads_active = False
+        self.frame_counter = 0
+        self.mutex = Lock()
+        self.streams = []
+        self.round_robin = cycle(range(self.num_streams))
+        self.results = PrettyTable()
+        self.results.field_names = ['Resolution', 'Total FPS', 'CPU (Avg)', 'CPU (Max)', 'Frames']
+        self.results.title = 'OpenALPR Speed: {} stream(s) on {} threads'.format(
+            self.num_streams, cpu_count())
 
         # Define default runtime and config paths if not specified
         if runtime is None:
@@ -162,7 +163,8 @@ class AlprBench:
                 out = os.path.join(self.downloads, f)
                 videos.append(out)
                 if f not in existing:
-                    _ = urlretrieve(os.path.join(endpoint, f), out)
+                    print('{}/{}'.format(endpoint, f))
+                    _ = urlretrieve('{}/{}'.format(endpoint, f), out)
                     self.message('\tDownloaded {}'.format(res))
                 else:
                     self.message('\tFound local {}'.format(res))
@@ -220,7 +222,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Benchmark OpenALPR software speed at various video resolutions',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-d', '--download_dir', type=str, default='/tmp/alprbench', help='folder to save videos')
     parser.add_argument('-g', '--gpu', action='store_true', help='run on GPU if available')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress all output besides final results')
     parser.add_argument('-r', '--resolution', type=str, default='all', help='video resolution to benchmark on')
@@ -235,7 +236,6 @@ if __name__ == '__main__':
         args.streams,
         args.resolution,
         args.gpu,
-        args.download_dir,
         args.runtime,
         args.config,
         args.quiet)
