@@ -66,18 +66,18 @@ class AlprBench:
 
         # Detect operating system
         if platform.system().lower().find('linux') == 0:
-            operating = 'linux'
+            self.operating = 'linux'
             self.message('\tOperating system: Linux')
             self.message('\tCPU model: {}'.format(get_cpu_model('linux')))
         elif platform.system().lower().find('windows') == 0:
-            operating = 'windows'
+            self.operating = 'windows'
             self.message('\tOperating system: Windows')
             self.message('\tCPU model: {}'.format(get_cpu_model('windows')))
         else:
             raise OSError('Detected OS other than Linux or Windows')
 
         # Prepare other attributes
-        if operating == 'linux':
+        if self.operating == 'linux':
             self.downloads = '/tmp/alprbench'
         else:
             self.downloads = os.path.join(os.environ['TEMP'], 'alprbench')
@@ -97,11 +97,11 @@ class AlprBench:
         # Define default runtime and config paths if not specified
         if runtime is None:
             self.runtime = '/usr/share/openalpr/runtime_data'
-            if operating == 'windows':
+            if self.operating == 'windows':
                 self.runtime = 'C:/OpenALPR/Agent' + self.runtime
         if config is None:
             self.config = '/usr/share/openalpr/config/openalpr.defaults.conf'
-            if operating == 'windows':
+            if self.operating == 'windows':
                 self.config = 'C:/OpenALPR/Agent' + self.config
         self.message('\tRuntime data: {}'.format(self.runtime))
         self.message('\tOpenALPR configuration: {}'.format(self.config))
@@ -120,7 +120,10 @@ class AlprBench:
         """Run threaded benchmarks on all requested resolutions."""
         videos = self.download_benchmarks()
         self.streams = [AlprStream(10, False) for _ in range(self.num_streams)]
-        name_regex = re.compile('(?<=\/)[^\.\/]+')
+        if self.operating == 'linux':
+            name_regex = re.compile('(?<=\/)[^\.\/]+')
+        elif self.operating == 'windows':
+            name_regex = re.compile('(?<=\\\)[^\.\\\]+')
         self.threads_active = True
 
         for v in videos:
@@ -163,7 +166,6 @@ class AlprBench:
                 out = os.path.join(self.downloads, f)
                 videos.append(out)
                 if f not in existing:
-                    print('{}/{}'.format(endpoint, f))
                     _ = urlretrieve('{}/{}'.format(endpoint, f), out)
                     self.message('\tDownloaded {}'.format(res))
                 else:
