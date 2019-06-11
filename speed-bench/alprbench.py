@@ -95,11 +95,15 @@ class AlprBench:
             self.num_streams, cpu_count())
 
         # Define default runtime and config paths if not specified
-        if runtime is None:
+        if runtime is not None:
+            self.runtime = runtime
+        else:
             self.runtime = '/usr/share/openalpr/runtime_data'
             if self.operating == 'windows':
                 self.runtime = 'C:/OpenALPR/Agent' + self.runtime
-        if config is None:
+        if config is not None:
+            self.config = config
+        else:
             self.config = '/usr/share/openalpr/config/openalpr.defaults.conf'
             if self.operating == 'windows':
                 self.config = 'C:/OpenALPR/Agent' + self.config
